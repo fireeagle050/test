@@ -8,6 +8,10 @@ import keyboard  # For detecting global hotkeys
 import json  # For saving and loading profiles
 import cv2  # For image processing
 from PIL import Image, ImageTk  # for displaying images in tkinter
+import base64
+import io
+import tempfile
+import atexit
 
 # Main application class
 class AutoClickerApp:
@@ -21,6 +25,8 @@ class AutoClickerApp:
 
         # Initialize variables
         self.click_functions = []  # List to store click sequences
+        self.temp_files = [] # List to store temporary file paths for cleanup
+        atexit.register(self.cleanup_temp_files) # Register cleanup function
         self.running = False  # Flag to check if the clicker is running
         self.time_delay = 1  # Default time delay between clicks
         self.loop_count = 0  # Default loop count (0 for infinite)
@@ -154,6 +160,16 @@ class AutoClickerApp:
         tk.Button(button_frame, text="Start", command=self.start_clicking, bg="#98c379", fg="#282c34", font=label_font, relief="raised", bd=3).grid(row=0, column=3, padx=5, pady=5, ipadx=10)
         tk.Button(button_frame, text="Stop", command=self.stop_clicking, bg="#e06c75", fg=button_fg, font=label_font, relief="raised", bd=3).grid(row=0, column=4, padx=5, pady=5, ipadx=10)
 
+        # Status bar
+        self.status_bar = tk.Label(self.root, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#282c34", fg="#abb2bf")
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def update_status(self, message, duration=3000):
+        """Updates the status bar with a message that disappears after a duration."""
+        self.status_bar.config(text=message)
+        if duration:
+            self.status_bar.after(duration, lambda: self.status_bar.config(text="Ready"))
+
     # Method to update the mouse position label
     def update_mouse_position(self):
         try:
@@ -189,7 +205,7 @@ class AutoClickerApp:
             if keyboard.is_pressed("ctrl+s"):
                 if self.running:
                     self.stop_clicking()
-                    print("Hotkey `Ctrl+S` pressed. Clicking stopped.")
+                    self.update_status("Clicking stopped via hotkey.")
                     time.sleep(0.2) # Prevent rapid re-triggering
 
             # Activate the color picker if Ctrl+P is pressed
@@ -398,8 +414,7 @@ class AutoClickerApp:
 
     # Method to save a profile
     def save_profile(self):
-        """Saves the current click sequence to a JSON file."""
-        # Open a file dialog to choose a save location
+        """Saves the current click sequence to a JSON file, embedding images."""
         filepath = filedialog.asksaveasfilename(
             defaultextension=".json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
@@ -408,22 +423,27 @@ class AutoClickerApp:
         if not filepath:
             return
 
-        # Create a dictionary with the profile data
         profile_data = {
-            "click_functions": self.click_functions,
+            "click_functions": [],
             "time_delay": self.time_entry.get(),
             "loop_count": self.loop_entry.get()
         }
 
-        # Save the data to a JSON file
+        for func in self.click_functions:
+            if func["detection_type"] == "Image":
+                with open(func["image_path"], "rb") as img_file:
+                    encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
+                profile_data["click_functions"].append({**func, "image_data": encoded_string})
+            else:
+                profile_data["click_functions"].append(func)
+
         with open(filepath, "w") as f:
             json.dump(profile_data, f, indent=4)
         messagebox.showinfo("Success", "Profile saved successfully.")
 
     # Method to load a profile
     def load_profile(self):
-        """Loads a click sequence from a JSON file."""
-        # Open a file dialog to choose a file to load
+        """Loads a click sequence from a JSON file, decoding embedded images."""
         filepath = filedialog.askopenfilename(
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Profile"
@@ -431,12 +451,21 @@ class AutoClickerApp:
         if not filepath:
             return
 
-        # Load the data from the JSON file
         with open(filepath, "r") as f:
             profile_data = json.load(f)
 
-        # Update the application with the loaded data
-        self.click_functions = profile_data.get("click_functions", [])
+        self.click_functions = []
+        for func in profile_data.get("click_functions", []):
+            if func["detection_type"] == "Image" and "image_data" in func:
+                image_data = base64.b64decode(func["image_data"])
+                image = Image.open(io.BytesIO(image_data))
+
+                # Save the image to a temporary file for this session
+                temp_path = self.create_temp_image_file(image)
+                self.click_functions.append({**func, "image_path": temp_path})
+            else:
+                self.click_functions.append(func)
+
         self.time_entry.delete(0, tk.END)
         self.time_entry.insert(0, profile_data.get("time_delay", 1))
         self.loop_entry.delete(0, tk.END)
@@ -538,15 +567,32 @@ class AutoClickerApp:
         # Take screenshot
         screenshot = pyautogui.screenshot(region=region)
 
-        # Save the screenshot
-        self.image_path = f"capture_{int(time.time())}.png"
-        screenshot.save(self.image_path)
+        # Save the screenshot to a temporary file
+        self.image_path = self.create_temp_image_file(screenshot)
 
         # Update the image preview
         img = Image.open(self.image_path)
         img.thumbnail((100, 100))
         self.image_preview = ImageTk.PhotoImage(img)
         self.image_preview_label.config(image=self.image_preview)
+
+    def create_temp_image_file(self, image):
+        """Saves an image to a temporary file and returns the path."""
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png", prefix="autoclicker_")
+        image.save(temp_file.name)
+        self.temp_files.append(temp_file.name)
+        temp_file.close() # Close the file handle
+        return temp_file.name
+
+    def cleanup_temp_files(self):
+        """Deletes all temporary files created during the session."""
+        import os
+        for path in self.temp_files:
+            try:
+                os.remove(path)
+                print(f"Cleaned up temp file: {path}")
+            except OSError as e:
+                print(f"Error cleaning up file {path}: {e}")
 
     def highlight_action(self, index):
         """Highlights the action at the given index in the listbox."""
