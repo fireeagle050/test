@@ -42,3 +42,5 @@ After the installation is complete, run the packaging script for your operating 
 *   **On macOS/Linux:** Open a terminal, navigate to this folder, and run the command: `./package_app.sh`
 
 This will create a `dist` folder. Inside, you will find the final, standalone application (`Clicker.exe` on Windows or `Clicker` on macOS/Linux) that you can run or share.
+
+**Note for Windows users:** A shortcut to the application will also be automatically created on your Desktop for your convenience.
