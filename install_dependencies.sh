@@ -1,5 +1,5 @@
 #!/bin/bash
-echo "Installing required Python packages..."
-pip install -r requirements.txt
+echo "Installing required Python packages from requirements.txt..."
+python3 -m pip install -r requirements.txt
 echo ""
-echo "Installation complete. You can now run the packager script."
+echo "Installation complete."
