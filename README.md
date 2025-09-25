@@ -49,3 +49,16 @@ For the best user experience, you should upload the final `.exe` (or application
 6.  Publish the release.
 
 Now your users can download the application with a single click!
+
+---
+
+## A Note on Publisher and Digital Signatures
+
+This project is configured to embed **publisher information** into the final `.exe` file. This means that when you right-click the application, go to **Properties**, and then the **Details** tab, you will see "Fire Eagle" listed as the Company. This makes the application look professional.
+
+However, you may still see a security warning from your operating system (like Windows Defender SmartScreen) when you first run the application. This is because the application does not have a **trusted digital signature**.
+
+*   **Embedded Info:** Basic text metadata (Company, Version, etc.) stored inside the file. **We have done this.**
+*   **Digital Signature:** A cryptographic seal of approval from a trusted Certificate Authority that verifies the publisher's identity. This is a security process that requires payment and identity verification and cannot be done here.
+
+It is safe to bypass these warnings for this application.
